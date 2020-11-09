@@ -1,0 +1,22 @@
+{
+    "name": "spemed/task_scheduling",
+    "description": "using yield to mock os task scheduling with php",
+    "type": "project",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "spemed",
+            "email": "945451501@qq.com"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Core\\": "src",
+            "Test\\": "tests"
+        }
+    },
+    "require": {},
+    "require-dev": {
+        "phpunit/phpunit": "9.4.2"
+    }
+}
