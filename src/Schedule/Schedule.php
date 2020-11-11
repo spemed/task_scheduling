@@ -207,25 +207,20 @@ class Schedule
         foreach ($this->waitForWrite as list($socket)) {
             $write[] = $socket;
         }
-        try {
-            $result = $this->poll->polling($read,$write,$error,$timeout);
-            foreach ($result->getRead() as $readSocket) {
-                list($_,$task) = $this->waitForRead[(int)$readSocket];
-                unset($this->waitForRead[$readSocket]);
-                foreach ($task as $taskItem) {
-                    $this->inSchedule($taskItem);
-                }
+        $result = $this->poll->polling($read,$write,$error,$timeout);
+        foreach ($result->getRead() as $readSocket) {
+            list($_,$task) = $this->waitForRead[(int)$readSocket];
+            unset($this->waitForRead[$readSocket]);
+            foreach ($task as $taskItem) {
+                $this->inSchedule($taskItem);
             }
-            foreach ($result->getWrite() as $writeSocket) {
-                list(,$task) = $this->waitForWrite[(int)$writeSocket];
-                unset($this->waitForWrite[$writeSocket]);
-                foreach ($task as $taskItem) {
-                    $this->inSchedule($taskItem);
-                }
+        }
+        foreach ($result->getWrite() as $writeSocket) {
+            list(,$task) = $this->waitForWrite[(int)$writeSocket];
+            unset($this->waitForWrite[$writeSocket]);
+            foreach ($task as $taskItem) {
+                $this->inSchedule($taskItem);
             }
-        } catch (SystemException $exception) {
-            print_r($exception->getMessage());
-            ob_flush();
         }
     }
 }

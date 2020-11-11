@@ -141,9 +141,9 @@ Connection: close\r
 \r
 $msg
 START;
-    fwrite($socket, $response);
-    yield new WaitForWrite($socket);
-    fclose($socket);
+            fwrite($socket, $response);
+            yield new WaitForWrite($socket);
+            fclose($socket);
 }
             $scheduler = new Schedule(new FifoQueue(),new Poll());
             $scheduler->newTask(server(8888));

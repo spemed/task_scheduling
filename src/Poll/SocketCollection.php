@@ -10,7 +10,7 @@ class SocketCollection
     private array $write;
     private array $error;
 
-    public function __construct(array $read,array $write,array $error=[])
+    public function __construct(array $read=[],array $write=[],array $error=[])
     {
         $this->read = $read;
         $this->write = $write;
