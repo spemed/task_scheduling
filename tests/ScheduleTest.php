@@ -122,7 +122,7 @@ class ScheduleTest extends TestCase
             ob_flush();
             $socket = @stream_socket_server("tcp://localhost:$port", $errNo, $errStr);
             if (!$socket) throw new Exception($errStr, $errNo);
-            stream_set_blocking($socket, 0); //同步非阻塞io
+            stream_set_blocking($socket, 1); //同步非阻塞io
             while (true) {
                 yield new waitForRead($socket);
                 $clientSocket = stream_socket_accept($socket, 0);
