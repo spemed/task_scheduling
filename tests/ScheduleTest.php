@@ -119,6 +119,7 @@ class ScheduleTest extends TestCase
     {
         function server($port) {
             echo "Starting server at port $port...\n";
+            ob_flush();
             $socket = @stream_socket_server("tcp://localhost:$port", $errNo, $errStr);
             if (!$socket) throw new Exception($errStr, $errNo);
             stream_set_blocking($socket, 0); //同步非阻塞io
@@ -131,18 +132,33 @@ class ScheduleTest extends TestCase
         function handleClient($socket) {
             yield new WaitForRead($socket);
             $data = fread($socket, 8192);
-            $msg = "Received following request:\n\n$data";
+            $msg = <<<START
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+</head>
+<body>
+    <h1>Hello world</h1>
+</body>
+</html>
+START;
+
             $msgLength = strlen($msg);
             $response = <<<START
 HTTP/1.1 200 OK\r
-Content-Type: text/plain\r
+Content-Type: text/html\r
 Content-Length: $msgLength\r
 Connection: close\r
-\r
+\r\n
 $msg
 START;
-            fwrite($socket, $response);
             yield new WaitForWrite($socket);
+            fwrite($socket, $response);
             fclose($socket);
 }
             $scheduler = new Schedule(new FifoQueue(),new Poll());
@@ -150,3 +166,4 @@ START;
             $scheduler->run();
     }
 }
+

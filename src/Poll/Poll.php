@@ -15,9 +15,10 @@ class Poll implements PollInterface
      * @param int $timeout
      * @return SocketCollection
      */
-    public function polling(array $read,array $write,array $error,?int $timeout = 0): SocketCollection
+    public function polling(array $read,array $write,array $error,?int $timeout): SocketCollection
     {
-        $result = stream_select($read,$write,$error,$timeout);
+        //忽略传递空数组时的错误
+        $result = @stream_select($read,$write,$error,$timeout);
         if (!$result) {
             return new SocketCollection();
             //throw new SystemException("failed to stream_select");

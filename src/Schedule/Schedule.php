@@ -58,7 +58,7 @@ class Schedule
      */
     public function run()
     {
-        $this->newTask($this->isPollTask()); //调度表启动时,启动调度任务
+        $this->newTask($this->isPollTask()); //调度启动时,启动获取轮询器任务
         //如果任务队列非空
         while ($this->queue->isEmpty() === false) {
             $task = $this->queue->dequeue(); //从任务队列中弹出一个元素
@@ -75,7 +75,6 @@ class Schedule
             }
             //如果任务尚未执行完毕
             if ($task->isFinished() === false) {
-                $this->usingTimeTable[$task->getTaskId()] = time();
                 //启动任务,直到下一次中断到达
                 $systemCaller = $task->run();
                 if ($systemCaller instanceof SystemCallInterface) {
@@ -182,7 +181,7 @@ class Schedule
     private function isPollTask() {
         //如果调度队列为空就阻塞直到网络的读写事件发生
         while (true) {
-            if ($this->queue->isEmpty() === false) {
+            if ($this->queue->isEmpty()) {
                 $this->isPoll(null); //阻塞直到发生网络的读写事件
             } else {
                 $this->isPoll(0); //有任务时默认不阻塞,提高调度能力
