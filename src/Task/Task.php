@@ -80,4 +80,12 @@ class Task
     {
         return $this->runtimeError;
     }
+
+    /**
+     * @return Generator
+     */
+    public function getCoroutine(): Generator
+    {
+        return $this->coroutine;
+    }
 }
