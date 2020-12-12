@@ -15,8 +15,11 @@
             "Test\\": "tests"
         }
     },
-    "require": {},
+    "require": {
+      "ext-sockets": "*"
+    },
     "require-dev": {
-        "phpunit/phpunit": "9.4.2"
+        "phpunit/phpunit": "9.4.2",
+        "ext-sockets": "*"
     }
 }

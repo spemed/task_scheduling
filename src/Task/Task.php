@@ -3,6 +3,7 @@
 
 namespace Core\Task;
 
+use Core\CoStack\Stack;
 use Generator;
 
 /**
@@ -22,7 +23,7 @@ class Task
     public function __construct(string $taskId,Generator $coroutine)
     {
         $this->taskId = $taskId;
-        $this->coroutine = $coroutine;
+        $this->coroutine = Stack::stackedCoroutine($coroutine);
     }
 
     /**

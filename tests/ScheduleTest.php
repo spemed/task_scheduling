@@ -4,6 +4,7 @@
 use Core\Exception\Result;
 use Core\Poll\Poll;
 use Core\Queue\FifoQueue;
+use Core\Socket\CoSocket;
 use Core\SystemCall\Fork;
 use Core\SystemCall\GetTaskId;
 use Core\SystemCall\KillTask;
@@ -122,7 +123,7 @@ class ScheduleTest extends TestCase
             ob_flush();
             $socket = @stream_socket_server("tcp://localhost:$port", $errNo, $errStr);
             if (!$socket) throw new Exception($errStr, $errNo);
-            stream_set_blocking($socket, 1); //同步非阻塞io
+            stream_set_blocking($socket, 0); //同步非阻塞io
             while (true) {
                 yield new waitForRead($socket);
                 $clientSocket = stream_socket_accept($socket, 0);
@@ -130,9 +131,10 @@ class ScheduleTest extends TestCase
             }
         }
         function handleClient($socket) {
-            yield new WaitForRead($socket);
-            $data = fread($socket, 8192);
-            $msg = <<<START
+            while (true) {
+                yield new WaitForRead($socket);
+                $data = fread($socket, 8192);
+                $msg = <<<START
 <!doctype html>
 <html lang="en">
 <head>
@@ -148,8 +150,8 @@ class ScheduleTest extends TestCase
 </html>
 START;
 
-            $msgLength = strlen($msg);
-            $response = <<<START
+                $msgLength = strlen($msg);
+                $response = <<<START
 HTTP/1.1 200 OK\r
 Content-Type: text/html\r
 Content-Length: $msgLength\r
@@ -157,13 +159,119 @@ Connection: close\r
 \r\n
 $msg
 START;
-            yield new WaitForWrite($socket);
-            fwrite($socket, $response);
-            fclose($socket);
+                yield new WaitForWrite($socket);
+                fwrite($socket, $response);
+            }
+
+            //fclose($socket);
 }
             $scheduler = new Schedule(new FifoQueue(),new Poll());
             $scheduler->newTask(server(8888));
             $scheduler->run();
+    }
+
+    public function testCoroutineStack()
+    {
+        function echoTimes($msg, $max) {
+            for ($i = 1; $i <= $max; ++$i) {
+                echo "$msg iteration $i\n";
+                yield;
+            }
+        }
+        function task() {
+            //todo 直接返回一个生成器对象,不会进入函数内部执行
+            yield echoTimes('foo', 10); // want: print foo ten times
+            echo "---*****---".PHP_EOL;
+            //todo 直接返回一个生成器对象,不会进入函数内部执行
+            yield echoTimes('bar', 5); // want: print bar five times
+
+        }
+        $scheduler = new Core\Schedule\Schedule(new FifoQueue(),null);
+        $scheduler->newTask(task());
+        $scheduler->run();
+        self::assertEquals(true,true,"task");
+    }
+
+    public function testNotBlockHttpServerV2()
+    {
+        function server($port) {
+            echo "Starting server at port $port...\n";
+            $socket = @socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
+            if ($socket === false) {
+                $errorCode = socket_last_error();
+                $errorMsg = socket_strerror($errorCode);
+                die("Couldn't create socket: [$errorCode] $errorMsg");
+            }
+            if(!socket_bind($socket,"127.0.0.1",8888)) {
+                $errorCode = socket_last_error();
+                $errorMsg = socket_strerror($errorCode);
+                die("Couldn't bind socket: [$errorCode] $errorMsg");
+            }
+            if (!socket_listen($socket)) {
+                $errorCode = socket_last_error();
+                $errorMsg = socket_strerror($errorCode);
+                die("Couldn't create socket: [$errorCode] $errorMsg");
+            }
+            socket_set_nonblock($socket); //设置为非阻塞io
+            while (true) {
+                yield new NewTask(
+                    handleClient(
+                        new CoSocket(
+                            yield (new CoSocket($socket))->accept()
+                        )
+                    )
+                );
+            }
+        }
+        //todo 正好可以研究http keepalive机制
+        //先研究异常
+        function handleClient(CoSocket $socket) {
+            echo("new connection".PHP_EOL);
+            ob_flush();
+            while (true) {
+                $data = yield $socket->read(8192);
+                //对端已经关闭连接,我方收到了fin包
+                if (strlen($data) === 0) {
+                    $socket->close();
+                    return;
+                }
+                if (is_bool($data) && !$data) {
+                    $errorCode = socket_last_error($socket->getSocket());
+                    $errorMsg = socket_strerror($errorCode);
+                    error_log("Couldn't read socket: [$errorCode] $errorMsg");
+                    return;
+                }
+                $msg = <<<START
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+</head>
+<body>
+    <h1>Hello world</h1>
+</body>
+</html>
+START;
+
+                $msgLength = strlen($msg);
+                $response = <<<START
+HTTP/1.1 200 OK\r
+Content-Type: text/html\r
+Content-Length: $msgLength\r
+\r\n
+$msg
+START;
+                $writeBytes = yield $socket->write($response,strlen($response));
+                //$socket->close();
+            }
+        }
+        $scheduler = new Schedule(new FifoQueue(),new Poll());
+        $scheduler->newTask(server(8888));
+        $scheduler->run();
     }
 }
 

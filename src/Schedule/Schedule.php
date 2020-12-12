@@ -17,9 +17,9 @@ class Schedule
     protected array $usingTimeTable = []; //任务使用时间调度
     protected array $waitForRead = [];
     protected array $waitForWrite = [];
-    protected PollInterface $poll;
+    protected ?PollInterface $poll;
 
-    public function __construct(Queue $queue,PollInterface $poll)
+    public function __construct(Queue $queue,?PollInterface $poll)
     {
         $this->queue = $queue;
         $this->poll = $poll;
@@ -29,6 +29,7 @@ class Schedule
     {
         //获得当前系统中的taskId
         $taskId = ++$this->maxTaskId;
+        //只要函数体中包含了yield关键字,那么该函数的调用就会返回一个生成器对象
         $task = new Task($taskId,$generator);
         //使用taskId标识每一个task,同时task内也要有属性标记自己的id,这是非常经典的设计
         $this->scheduleTable[$taskId] = $task;
@@ -58,7 +59,7 @@ class Schedule
      */
     public function run()
     {
-        $this->newTask($this->isPollTask()); //调度启动时,启动获取轮询器任务
+        $this->newTask($this->isPollTask()); //调度启动时,把网络轮询器任务加入调度队列
         //如果任务队列非空
         while ($this->queue->isEmpty() === false) {
             $task = $this->queue->dequeue(); //从任务队列中弹出一个元素
@@ -79,9 +80,7 @@ class Schedule
                 $systemCaller = $task->run();
                 if ($systemCaller instanceof SystemCallInterface) {
                     $systemCaller->execute($task,$this);
-                    //todo 此处为何从系统调用中返回需要continue呢？
-                    //todo 为何需要在每个系统调用中把任务重新加入调度计划,而不是在调度中心对象中统一加入？思考一下？
-                    // 是否是某些系统调用执行完可以马上恢复任务,而不是重新让任务加入调度呢？
+                    //交给对应的系统调用判断是否需要马上加入调度队列
                     continue;
                 }
                 $this->inSchedule($task); //将任务重新加入调度列表
@@ -117,23 +116,6 @@ class Schedule
     public function wait(int $taskId,int $seconds)
     {
         $this->sleepTable[$taskId] = time() + $seconds;
-    }
-
-    /**
-     * @param Task $task 老协程
-     * @return Task
-     */
-    public function fork(Task $task):Task
-    {
-        $taskId = ++$this->maxTaskId;
-        $newTask = new Task($taskId,unserialize(serialize($task->getCoroutine())));
-        //使用taskId标识每一个task,同时task内也要有属性标记自己的id,这是非常经典的设计
-        $this->scheduleTable[$taskId] = $newTask;
-        //初始化休眠表
-        $this->sleepTable[$taskId] = null;
-        //初始化最近一次调度时间记录
-        $this->usingTimeTable[$taskId] = null;
-        return $newTask;
     }
 
     /**
@@ -179,6 +161,9 @@ class Schedule
      *  网络io轮询器
      */
     private function isPollTask() {
+        if($this->poll == null) {
+            return;
+        }
         //如果调度队列为空就阻塞直到网络的读写事件发生
         while (true) {
             if ($this->queue->isEmpty()) {
@@ -208,7 +193,7 @@ class Schedule
         }
         $result = $this->poll->polling($read,$write,$error,$timeout);
         foreach ($result->getRead() as $readSocket) {
-            list($_,$task) = $this->waitForRead[(int)$readSocket];
+            list(,$task) = $this->waitForRead[(int)$readSocket];
             unset($this->waitForRead[$readSocket]);
             foreach ($task as $taskItem) {
                 $this->inSchedule($taskItem);
